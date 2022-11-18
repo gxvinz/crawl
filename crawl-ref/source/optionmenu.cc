@@ -74,9 +74,42 @@ OptionMenu::OptionMenu(int width, int height)
     m_height = height;
 }
 
+void OptionMenu::_render()
+{
+    m_root->render();
+}
 
-if (key_is_escape(keyin) || allow_easy_quit && keyin == ' ')
+void OptionMenu::_allocate_region()
+{
+    if (!have_allocated)
     {
-    ret = PROMPT_ABORT;
-    break;
+        have_allocated = true;
+#ifdef USE_TILE_WEB
+        if (menu_id)
+            open_menus.emplace(menu_id, this);
+#endif
+        // if (m_initial_focus)
+        //     scroll_button_into_view(m_initial_focus);
     }
+    m_root->allocate_region(ui::Widget::m_region);
+}
+
+void display_options() {
+    OptionMenu menu(500, 500);
+    menu._allocate_region()
+    menu._render();
+
+    // menu.show(true);
+    // if (!crawl_state.doing_prev_cmd_again)
+    // {
+    //     redraw_screen();
+    //     update_screen();
+    // }
+}
+
+
+// if (key_is_escape(keyin) || allow_easy_quit && keyin == ' ')
+//     {
+//     ret = PROMPT_ABORT;
+//     break;
+//     }

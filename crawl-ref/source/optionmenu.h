@@ -8,7 +8,7 @@
 
 // Case at line 2324
 
-class OptionMenu : public ui::Widget
+class OptionMenu : public Menu
 {
 public:
     OptionMenu(int width, int height);
@@ -24,8 +24,11 @@ public:
 
     void display_options();
 
+    void scroll_button_into_view(MenuButton *btn);
+
 protected:
     bool displayed = false;
+    bool have_allocated = false;
 
     shared_ptr<ui::Widget> m_root;
     shared_ptr<ui::Widget> m_grid;
