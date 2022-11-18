@@ -1084,7 +1084,7 @@ int attack::player_apply_slaying_bonuses(int damage, bool aux)
 
     // XXX: should this also trigger on auxes?
     if (!aux && !ranged)
-        damage_plus += you.infusion_amount() * you.infusion_multiplier();
+        damage_plus += you.infusion_amount() * 4;
 
     return _core_apply_slaying(damage, damage_plus);
 }
@@ -1095,6 +1095,11 @@ int attack::player_apply_final_multipliers(int damage, bool /*aux*/)
     if (you.form == transformation::shadow)
         damage = div_rand_round(damage, 2);
 
+    return damage;
+}
+
+int attack::player_apply_postac_multipliers(int damage)
+{
     return damage;
 }
 
@@ -1184,6 +1189,7 @@ int attack::calc_damage()
             return 0;
         damage = player_apply_final_multipliers(damage);
         damage = apply_defender_ac(damage);
+        damage = player_apply_postac_multipliers(damage);
 
         damage = max(0, damage);
         set_attack_verb(damage);

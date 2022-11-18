@@ -1112,12 +1112,12 @@ static int _mons_power_hd_factor(spell_type spell)
 
         case SPELL_OLGREBS_TOXIC_RADIANCE:
         case SPELL_IOOD:
+        case SPELL_FREEZE:
             return 8;
 
         case SPELL_MONSTROUS_MENAGERIE:
         case SPELL_BATTLESPHERE:
         case SPELL_IGNITE_POISON:
-        case SPELL_FREEZE:
         case SPELL_IRRADIATE:
             return 6;
 
@@ -2550,11 +2550,7 @@ static void _cast_creeping_frost(monster &caster, mon_spell_slot, bolt &beam)
             visible_effect |= _creeping_frost_freeze(mon->pos(), beam);
     }
     if (visible_effect && Options.use_animations & UA_MONSTER)
-    {
-        viewwindow(false);
-        update_screen();
-        scaled_delay(50);
-    }
+        animation_delay(50, true);
 }
 
 static ai_action::goodness _mons_likes_blinking(const monster &caster)
@@ -2623,11 +2619,7 @@ static void _cast_pyroclastic_surge(monster &caster, mon_spell_slot, bolt &beam)
             visible_effect |= _pyroclastic_surge(mon->pos(), beam);
     }
     if (visible_effect)
-    {
-        viewwindow(false);
-        update_screen();
-        scaled_delay(25);
-    }
+        animation_delay(25, true);
 }
 
 /// Should the given monster cast Arcjolt?
@@ -4211,8 +4203,6 @@ bool handle_mon_spell(monster* mons)
     if (!(flags & MON_SPELL_INSTANT))
     {
         mons->lose_energy(EUT_SPELL);
-        if (spell_cast == SPELL_SANDBLAST)
-            mons->lose_energy(EUT_SPELL); // double slow!
         return true;
     }
 
@@ -4473,7 +4463,9 @@ static bool _mons_cast_freeze(monster* mons)
 
     const int pow = mons_spellpower(*mons, SPELL_FREEZE);
 
-    const int base_damage = freeze_damage(pow).roll();
+    // We use non-random damage for monster Freeze so that the damage display
+    // is simple to display to players without being misleading.
+    const int base_damage = freeze_damage(pow, false).roll();
     const int damage = resist_adjust_damage(target, BEAM_COLD, base_damage);
 
     if (you.can_see(*target))
@@ -5441,8 +5433,13 @@ static void _mons_upheaval(monster& mons, actor& /*foe*/, bool randomize)
         for (coord_def pos : affected)
         {
             beam.draw(pos);
-            scaled_delay(25);
+            // No need to delay if we are not refreshing
+            if (!Options.reduce_animations)
+                scaled_delay(25); // should this refresh?
         }
+
+        if (Options.reduce_animations)
+            animation_delay(25, true);
     }
 
     for (coord_def pos : affected)
@@ -6403,7 +6400,8 @@ void mons_cast(monster* mons, bolt pbolt, spell_type spell_cast,
         return;
 
     case SPELL_WARNING_CRY:
-        return; // the entire point is the noise, handled elsewhere
+        noisy(spell_effect_noise(SPELL_WARNING_CRY), mons->pos(), mons->mid);
+        return;
 
     case SPELL_HUNTING_CALL:
         _battle_cry(*mons, SPELL_HUNTING_CALL);
@@ -6601,8 +6599,13 @@ static int _noise_level(const monster* mons, spell_type spell,
     {
         noise = 0;
     }
-    else if (mons_genus(mons->type) == MONS_DRAGON)
+    // Dragons are extra loud.
+    else if (mons_genus(mons->type) == MONS_DRAGON
+             && (slot_flags & MON_SPELL_INNATE_MASK
+                 || slot_flags & MON_SPELL_VOCAL))
+    {
         noise = get_shout_noise_level(S_LOUD_ROAR);
+    }
     else
         noise = spell_noise(spell);
 
@@ -7269,6 +7272,7 @@ static void _doom_howl(monster &mon)
     mprf("%s unleashes a %s howl, and it begins to echo in your mind!",
          mon.name(DESC_THE).c_str(),
          silenced(mon.pos()) ? "silent" : "terrible");
+    noisy(spell_effect_noise(SPELL_DOOM_HOWL), mon.pos(), mon.mid);
     you.duration[DUR_DOOM_HOWL] = random_range(120, 180);
     mon.props[DOOM_HOUND_HOWLED_KEY] = true;
 }

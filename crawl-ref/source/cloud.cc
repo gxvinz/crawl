@@ -855,6 +855,7 @@ static bool _cloud_has_negative_side_effects(cloud_type cloud)
     case CLOUD_PETRIFY:
     case CLOUD_ACID:
     case CLOUD_NEGATIVE_ENERGY:
+    case CLOUD_BLASTSPARKS:
         return true;
     default:
         return false;
@@ -1345,6 +1346,7 @@ int actor_apply_cloud(actor *act)
 
     if ((player || final_damage > 0
          || _cloud_has_negative_side_effects(cloud.type))
+        && cloud.type != CLOUD_BLASTSPARKS // no effect over time
         && cloud.type != CLOUD_STORM) // handled elsewhere
     {
         cloud.announce_actor_engulfed(act);
@@ -1447,6 +1449,12 @@ bool is_damaging_cloud(cloud_type type, bool accept_temp_resistances, bool yours
     }
 }
 
+bool cloud_damages_over_time(cloud_type type, bool accept_temp_resistances, bool yours)
+{
+    return type != CLOUD_BLASTSPARKS
+        && is_damaging_cloud(type, accept_temp_resistances, yours);
+}
+
 /**
  * Will the given monster refuse to walk into the given cloud?
  *
@@ -1470,7 +1478,8 @@ static bool _mons_avoids_cloud(const monster* mons, const cloud_struct& cloud,
 
     // Berserk monsters are less careful and will blindly plow through any
     // dangerous cloud, just to kill you. {due}
-    if (!extra_careful && mons->berserk_or_insane())
+    // Fleeing monsters are heedless and will make very poor life choices.
+    if (!extra_careful && (mons->berserk_or_insane() || mons_is_fleeing(*mons)))
         return false;
 
     switch (cloud.type)
@@ -1478,6 +1487,12 @@ static bool _mons_avoids_cloud(const monster* mons, const cloud_struct& cloud,
     case CLOUD_MIASMA:
         // Even the dumbest monsters will avoid miasma if they can.
         return true;
+
+    case CLOUD_BLASTSPARKS:
+        // As with traps, make friendly monsters not walk into blastsparks.
+        return mons->attitude == ATT_FRIENDLY
+        // Hack: try to avoid penance.
+            || mons->attitude == ATT_GOOD_NEUTRAL;
 
     case CLOUD_RAIN:
         // Fiery monsters dislike the rain.
@@ -1568,7 +1583,6 @@ bool is_harmless_cloud(cloud_type type)
            && clouds[type].damage.base == 0
            && clouds[type].damage.random == 0
            && !_cloud_has_negative_side_effects(type)
-           && type != CLOUD_BLASTSPARKS // XXX: maybe should be in negative side effects?
            && type != CLOUD_VORTEX;
 }
 

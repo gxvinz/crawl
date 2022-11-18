@@ -107,6 +107,7 @@
 #include "nearby-danger.h"
 #include "notes.h"
 #include "options.h"
+#include "optionmenu.h"
 #include "output.h"
 #include "player.h"
 #include "player-reacts.h"
@@ -194,7 +195,7 @@ NORETURN static void _launch_game();
 
 static void _do_berserk_no_combat_penalty();
 static void _do_wait_spells();
-static void _uncurl();
+
 static void _input();
 
 static void _safe_move_player(coord_def move);
@@ -820,6 +821,7 @@ static bool _cmd_is_repeatable(command_type cmd, bool is_again = false)
     case CMD_READ_MESSAGES:
     case CMD_SEARCH_STASHES:
     case CMD_LOOKUP_HELP:
+    case CMD_DISPLAY_OPTIONS:
         mpr("You can't repeat informational commands.");
         return false;
 
@@ -1146,7 +1148,6 @@ static void _input()
         {
             if (you.berserk())
                 _do_berserk_no_combat_penalty();
-            _uncurl();
             world_reacts();
         }
 
@@ -1280,7 +1281,6 @@ static void _input()
             _do_berserk_no_combat_penalty();
 
         _do_wait_spells();
-        _uncurl();
 
         world_reacts();
     }
@@ -1325,7 +1325,7 @@ static bool _can_take_stairs(dungeon_feature_type ftype, bool down,
     }
 
     // Immobile
-    if (you.is_stationary())
+    if (!you.is_motile())
     {
         canned_msg(MSG_CANNOT_MOVE);
         return false;
@@ -2323,6 +2323,9 @@ void process_command(command_type cmd, command_type prev_cmd)
         break;
     }
 
+    // OPTIONS MENU
+    case CMD_DISPLAY_OPTIONS: display_options();
+
 #ifdef WIZARD
     case CMD_WIZARD: handle_wizard_command(); break;
     case CMD_EXPLORE_MODE: enter_explore_mode(); break;
@@ -2797,16 +2800,6 @@ static void _do_wait_spells()
     handle_searing_ray();
     handle_maxwells_coupling();
     handle_flame_wave();
-}
-
-// palentongas uncurl at the start of the turn
-static void _uncurl()
-{
-    if (you.props[PALENTONGA_CURL_KEY].get_bool())
-    {
-        you.props[PALENTONGA_CURL_KEY] = false;
-        you.redraw_armour_class = true;
-    }
 }
 
 static void _safe_move_player(coord_def move)

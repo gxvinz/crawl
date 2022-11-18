@@ -722,6 +722,8 @@ monster_info::monster_info(const monster* m, int milev)
     if (m->has_ghost_brand())
         props[SPECIAL_WEAPON_KEY] = m->ghost_brand();
 
+    ghost_colour = m->ghost ? m->ghost->colour : COLOUR_INHERIT;
+
     // book loading for player ghost and vault monsters
     spells.clear();
     if (m->props.exists(CUSTOM_SPELLS_KEY) || mons_is_pghost(type)
@@ -1326,12 +1328,14 @@ string monster_info::pluralised_name(bool fullname) const
     // Unless it's Mara, who summons illusions of himself.
     if (mons_is_unique(type) && type != MONS_MARA)
         return common_name();
-    else if (mons_genus(type) == MONS_DRACONIAN)
+    else if (mons_genus(type) == MONS_DRACONIAN && !is(MB_NAME_REPLACE))
         return pluralise_monster(mons_type_name(MONS_DRACONIAN, DESC_PLAIN));
-    else if (type == MONS_UGLY_THING || type == MONS_VERY_UGLY_THING
-             || type == MONS_DANCING_WEAPON || type == MONS_SPECTRAL_WEAPON
-             || type == MONS_ANIMATED_ARMOUR || type == MONS_MUTANT_BEAST
-             || !fullname)
+    else if ((type == MONS_UGLY_THING || type == MONS_VERY_UGLY_THING
+                || type == MONS_DANCING_WEAPON || type == MONS_SPECTRAL_WEAPON
+                || type == MONS_ANIMATED_ARMOUR || type == MONS_MUTANT_BEAST
+                || !fullname)
+            && !is(MB_NAME_REPLACE))
+
     {
         return pluralise_monster(mons_type_name(type, DESC_PLAIN));
     }

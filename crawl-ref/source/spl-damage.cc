@@ -126,7 +126,7 @@ spret cast_fire_storm(int pow, bolt &beam, bool fail)
     setup_fire_storm(&you, pow, beam);
 
     bolt tempbeam = beam;
-    tempbeam.ex_size = (pow > 76) ? 3 : 2;
+    tempbeam.ex_size = (pow > 0) ? 3 : 2;
     tempbeam.is_tracer = true;
 
     tempbeam.explode(false);
@@ -243,11 +243,7 @@ static void _chain_lightning_to(const actor &caster, int power,
     }
 
     if (beam.animate)
-    {
-        viewwindow(false);
-        update_screen();
-        scaled_delay(200);
-    }
+        animation_delay(200, true);
 
     if (!new_victims.empty())
         _chain_lightning_to(caster, power, new_victims, seen_set, arcs + 1);
@@ -328,8 +324,12 @@ static bool _warn_about_bad_targets(spell_type spell, vector<coord_def> targets)
 
 spret cast_chain_lightning(int pow, const actor &caster, bool fail)
 {
-    if (caster.is_player() && _warn_about_bad_targets(SPELL_CHAIN_LIGHTNING, chain_lightning_targets()))
+    if (caster.is_player()
+        && _warn_about_bad_targets(SPELL_CHAIN_LIGHTNING,
+                                   chain_lightning_targets()))
+    {
         return spret::abort;
+    }
     // NOTE: it's possible to hit something not in this list by arcing
     // chain lightning through an invisible enemy through an ally. Oh well...
 
@@ -675,12 +675,12 @@ static int _ozo_adj_dam(int base_dam, int adj_actors, bool actual)
         return base_dam;
     case 1:
         if (actual)
-            return div_rand_round(2 * base_dam, 3);
-        return 2 * base_dam / 3;
+            return div_rand_round(7 * base_dam, 10);
+        return 7 * base_dam / 10;
     default:
         if (actual)
-            return div_rand_round(base_dam, 3);
-        return base_dam / 3;
+            return div_rand_round(2 * base_dam, 5);
+        return base_dam * 2 / 5;
     }
 }
 
@@ -862,9 +862,10 @@ spret fire_los_attack_spell(spell_type spell, int pow, const actor* agent,
     return _cast_los_attack_spell(spell, pow, agent, true, fail, damage_done);
 }
 
-dice_def freeze_damage(int pow)
+dice_def freeze_damage(int pow, bool random)
 {
-    return dice_def(1, 3 + pow / 3);
+    return dice_def(1, random ? 3 + div_rand_round(pow * 3, 10)
+                              : 3 + pow * 3 / 10);
 }
 
 spret cast_freeze(int pow, monster* mons, bool fail)
@@ -897,7 +898,7 @@ spret cast_freeze(int pow, monster* mons, bool fail)
     beam.flavour = BEAM_COLD;
     beam.thrower = KILL_YOU;
 
-    const int orig_hurted = freeze_damage(pow).roll();
+    const int orig_hurted = freeze_damage(pow, true).roll();
     // calculate the resist adjustment to punctuate
     int hurted = mons_adjust_flavoured(mons, beam, orig_hurted, false);
     mprf("You freeze %s%s%s",
@@ -1013,9 +1014,54 @@ string describe_airstrike_dam(dice_def dice)
                         dice.size + MAX_AIRSTRIKE_BONUS);
 }
 
-dice_def base_fragmentation_damage(int pow)
+spret cast_momentum_strike(int pow, coord_def target, bool fail)
 {
-    return dice_def(3, 5 + pow / 5);
+    if (cell_is_solid(target))
+    {
+        canned_msg(MSG_UNTHINKING_ACT);
+        return spret::abort;
+    }
+
+    monster* mons = monster_at(target);
+    if (mons
+        && !mons->submerged()
+        && !god_protects(mons)
+        && you.can_see(*mons)
+        && stop_attack_prompt(mons, false, you.pos()))
+    {
+        return spret::abort;
+    }
+
+    fail_check();
+
+    bolt beam;
+    zappy(ZAP_MOMENTUM_STRIKE, pow, false, beam);
+    beam.origin_spell = SPELL_MOMENTUM_STRIKE;
+    beam.source = beam.target = target;
+    beam.attitude = ATT_FRIENDLY;
+    beam.fire();
+
+    if (!beam.foe_info.hurt && !beam.friend_info.hurt) // miss!
+    {
+        if (!mons || !you.can_see(*mons))
+            mpr("The momentum dissipates harmlessly.");
+        return spret::success;
+    }
+
+    const int dur = random_range(5, 8);
+    if (you.duration[DUR_NO_MOMENTUM] < dur)
+    {
+        you.set_duration(DUR_NO_MOMENTUM, dur, dur,
+                         "You are unable to move.");
+    }
+
+    return spret::success;
+}
+
+dice_def base_fragmentation_damage(int pow, bool random)
+{
+    return dice_def(3, random ? 4 + div_rand_round(pow, 5)
+                              : 4 + pow / 5);
 }
 
 enum class frag_damage_type
@@ -1263,7 +1309,7 @@ bool setup_fragmentation_beam(bolt &beam, int pow, const actor *caster,
     else
         beam.aux_source = effect.name;
 
-    beam.damage  = base_fragmentation_damage(pow);
+    beam.damage  = base_fragmentation_damage(pow, caster->is_player());
     beam.flavour = BEAM_FRAG;
     beam.ex_size = 1;
     switch (effect.damage)
@@ -1390,9 +1436,10 @@ static int _shatter_mon_dice(const monster *mon)
         return DEFAULT_SHATTER_DICE;
 }
 
-dice_def shatter_damage(int pow, monster *mon)
+dice_def shatter_damage(int pow, monster *mon, bool random)
 {
-    return dice_def(_shatter_mon_dice(mon), 5 + pow / 3);
+    return dice_def(_shatter_mon_dice(mon), random ? 5 + div_rand_round(pow, 3)
+                                                   : 5 + pow / 3);
 }
 
 static int _shatter_monsters(coord_def where, int pow, actor *agent)
@@ -1403,7 +1450,7 @@ static int _shatter_monsters(coord_def where, int pow, actor *agent)
         return 0;
 
     const dice_def dam_dice = shatter_damage(pow, mon);
-    int damage = max(0, dam_dice.roll() - random2(mon->armour_class()));
+    int damage = max(0, dam_dice.roll() - random2(1 + mon->armour_class()));
 
     if (agent->is_player())
         _player_hurt_monster(*mon, damage, BEAM_MMISSILE);
@@ -1706,9 +1753,7 @@ static void _animate_scorch(coord_def p)
                                    static_cast<unsigned short>(RED)});
 #endif
 
-    viewwindow(false);
-    update_screen();
-    scaled_delay(50);
+    animation_delay(50, true);
 }
 
 spret cast_scorch(int pow, bool fail)
@@ -1954,7 +1999,7 @@ static int _ignite_poison_bog(coord_def where, int pow, actor *agent)
     if (!one_chance_in(4))
         return false;
 
-    place_cloud(CLOUD_FIRE, where, 2 + random2(pow / 30), agent);
+    place_cloud(CLOUD_FIRE, where, 2 + random2(1 + div_rand_round(pow, 30)), agent);
 
     return true;
 }
@@ -2376,15 +2421,13 @@ spret cast_ignition(const actor *agent, int pow, bool fail)
             if (Options.use_animations & UA_BEAM)
                 beam_visual.explosion_draw_cell(*ai);
         }
+
         if (Options.use_animations & UA_BEAM)
             beam_visual.explosion_draw_cell(pos);
     }
+
     if (Options.use_animations & UA_BEAM)
-    {
-        viewwindow(false);
-        update_screen();
-        scaled_delay(50);
-    }
+        animation_delay(50, true);
 
     // Real explosions on each individual square.
     for (coord_def pos : blast_sources)
@@ -2395,7 +2438,7 @@ spret cast_ignition(const actor *agent, int pow, bool fail)
     return spret::success;
 }
 
-static const int DISCHARGE_POWER_DIV = 8;
+static const int DISCHARGE_POWER_DIV = 12;
 
 static int _discharge_monsters(const coord_def &where, int pow,
                                const actor &agent, int remaining)
@@ -2411,7 +2454,7 @@ static int _discharge_monsters(const coord_def &where, int pow,
     else
     {
         damage = FLAT_DISCHARGE_ARC_DAMAGE
-                 + random2(4 + div_rand_round(pow, DISCHARGE_POWER_DIV));
+                 + random2(3 + div_rand_round(pow, DISCHARGE_POWER_DIV));
     }
 
     bolt beam;
@@ -2443,8 +2486,8 @@ static int _discharge_monsters(const coord_def &where, int pow,
         if (damage > 0)
             victim->expose_to_element(BEAM_ELECTRICITY, 2);
     }
-    // rEelec monsters don't allow arcs to continue.
-    else if (victim->res_elec() > 0)
+    // Elec immune monsters don't allow arcs to continue.
+    else if (victim->res_elec() >= 3)
         return 0;
     else if (god_protects(&agent, victim->as_monster(), false))
         return 0;
@@ -2459,7 +2502,6 @@ static int _discharge_monsters(const coord_def &where, int pow,
 
         dprf("%s: static discharge damage: %d",
              mons->name(DESC_PLAIN, true).c_str(), damage);
-        damage = mons_adjust_flavoured(mons, beam, damage, false);
         mprf("%s is struck by an arc of lightning%s",
                 mons->name(DESC_THE).c_str(),
                 attack_strength_punctuation(damage).c_str());
@@ -2476,7 +2518,7 @@ static int _discharge_monsters(const coord_def &where, int pow,
     {
         damage += apply_random_around_square([pow, &agent, remaining]
                                             (coord_def where2) {
-            return _discharge_monsters(where2, pow, agent, remaining -1);
+            return _discharge_monsters(where2, pow, agent, remaining - 1);
         }, where, true, 1);
     }
     else if (damage > 0)
@@ -2502,11 +2544,8 @@ bool safe_discharge(coord_def where, vector<const actor *> &exclude)
             if (act->is_monster())
             {
                 // Harmless to these monsters, so don't prompt about them.
-                if (act->res_elec() > 0
-                    || god_protects(act->as_monster()))
-                {
+                if (act->res_elec() >= 3 || god_protects(act->as_monster()))
                     continue;
-                }
 
                 if (stop_attack_prompt(act->as_monster(), false, where))
                     return false;
@@ -2530,11 +2569,11 @@ spret cast_discharge(int pow, const actor &agent, bool fail, bool prompt)
 
     fail_check();
 
-    const int num_targs = 1 + random2(2 + div_rand_round(pow,20));
+    const int num_targs = 1 + random2(2 + div_rand_round(pow, 25));
     const int dam =
         apply_random_around_square([pow, &agent] (coord_def target) {
             return _discharge_monsters(target, pow, agent,
-                        1 + random2(2 + div_rand_round(pow, 20)));
+                        1 + random2(2 + div_rand_round(pow, 25)));
         }, agent.pos(), true, num_targs);
 
     dprf("Arcs: %d Damage: %d", num_targs, dam);
@@ -2542,7 +2581,7 @@ spret cast_discharge(int pow, const actor &agent, bool fail, bool prompt)
     if (dam > 0)
     {
         if (Options.use_animations & UA_BEAM)
-            scaled_delay(100);
+            animation_delay(100, Options.reduce_animations);
     }
     else
     {
@@ -2566,9 +2605,9 @@ int discharge_max_damage(int pow)
            + (pow + DISCHARGE_POWER_DIV - 1) / DISCHARGE_POWER_DIV;
 }
 
-dice_def arcjolt_damage(int pow)
+dice_def arcjolt_damage(int pow, bool random)
 {
-    return dice_def(1, 10 + pow / 2);
+    return dice_def(1, random ? 10 + div_rand_round(pow, 2) : 10 + pow / 2);
 }
 
 vector<coord_def> arcjolt_targets(const actor &agent, int power, bool actual)
@@ -2593,17 +2632,23 @@ vector<coord_def> arcjolt_targets(const actor &agent, int power, bool actual)
         {
             actor* act = actor_at(p);
             const bool seen_act = act && (actual || agent.can_see(*act));
-            if (seen_act && act != &agent)
+            if (!seen_act
+                || act == &agent
+                || act->res_elec() >= 3
+                || act->is_monster()
+                   && mons_is_projectile(*act->as_monster()))
             {
-                targets.push_back(p);
+                continue;
+            }
 
-                for (adjacent_iterator ai(p); ai; ++ai)
+            targets.push_back(p);
+
+            for (adjacent_iterator ai(p); ai; ++ai)
+            {
+                if (!seen.count(*ai) && agent.see_cell(*ai))
                 {
-                    if (!seen.count(*ai) && agent.see_cell(*ai))
-                    {
-                        seen.insert(*ai);
-                        next_frontier.push_back(*ai);
-                    }
+                    seen.insert(*ai);
+                    next_frontier.push_back(*ai);
                 }
             }
         }
@@ -2633,7 +2678,7 @@ spret cast_arcjolt(int pow, const actor &agent, bool fail)
 #ifdef USE_TILE
     beam.tile_beam  = -1;
 #endif
-    beam.draw_delay = 0;
+    beam.draw_delay = 10;
 
     if (agent.is_player())
         mpr("Electricity surges outward!");
@@ -2657,7 +2702,7 @@ spret cast_arcjolt(int pow, const actor &agent, bool fail)
         if (mon && god_protects(&agent, mon, false))
             continue;
 
-        const int rolled_dam = arcjolt_damage(pow).roll();
+        const int rolled_dam = arcjolt_damage(pow, true).roll();
         const int post_ac_dam = max(0, act->apply_ac(rolled_dam, 0,
                                                      ac_type::half));
         const int post_resist_dam = mon ? mons_adjust_flavoured(mon, beam,
@@ -2665,15 +2710,20 @@ spret cast_arcjolt(int pow, const actor &agent, bool fail)
                                         : check_your_resists(post_ac_dam,
                                                              beam.flavour,
                                                              "arcjolt");
+        if (post_resist_dam)
+            act->hurt(&agent, post_resist_dam);
         act->expose_to_element(beam.flavour, post_resist_dam);
-        act->hurt(&agent, post_resist_dam);
         if (mon && act->alive())
         {
             behaviour_event(mon, ME_WHACK, &agent);
             if (post_resist_dam && you.can_see(*mon))
                 print_wounds(*mon);
         }
+
+        noisy(spell_effect_noise(SPELL_ARCJOLT), t);
     }
+    if (Options.use_animations & UA_BEAM)
+        animation_delay(100, Options.reduce_animations);
 
     return spret::success;
 }
@@ -2743,6 +2793,7 @@ spret cast_thunderbolt(actor *caster, int pow, coord_def aim, bool fail)
     beam.range             = 1;
     beam.hit               = AUTOMATIC_HIT;
     beam.ac_rule           = ac_type::proportional;
+    beam.loudness          = spell_effect_noise(SPELL_THUNDERBOLT);
     beam.set_agent(caster);
 #ifdef USE_TILE
     beam.tile_beam = -1;
@@ -2759,7 +2810,7 @@ spret cast_thunderbolt(actor *caster, int pow, coord_def aim, bool fail)
             beam.draw(entry.first);
         }
 
-        scaled_delay(200);
+        animation_delay(200, Options.reduce_animations);
     }
 
     beam.glyph = 0; // FIXME: a hack to avoid "appears out of thin air"
@@ -2784,6 +2835,8 @@ spret cast_thunderbolt(actor *caster, int pow, coord_def aim, bool fail)
                                div_rand_round(30 + pow / 6, arc + 2));
         beam.fire();
     }
+
+    noisy(spell_effect_noise(SPELL_THUNDERBOLT), caster->pos());
 
     _set_thundervolt_last_aim(caster, aim);
 
@@ -3014,7 +3067,8 @@ spret cast_toxic_radiance(actor *agent, int pow, bool fail, bool mon_tracer)
         else
             mpr("Your toxic radiance grows in intensity.");
 
-        you.increase_duration(DUR_TOXIC_RADIANCE, 2 + random2(pow/20), 15);
+        you.increase_duration(DUR_TOXIC_RADIANCE,
+                              2 + random2(1 + div_rand_round(pow, 25)), 15);
         you.props[TOXIC_RADIANCE_POWER_KEY].get_int() = pow;
         toxic_radiance_effect(&you, 10, true);
 
@@ -3082,7 +3136,8 @@ void toxic_radiance_effect(actor* agent, int mult, bool on_cast)
         if (agent->is_monster() && mons_aligned(agent, *ai))
             continue;
 
-        int dam = roll_dice(1, 1 + pow / 20) * div_rand_round(mult, BASELINE_DELAY);
+        int dam = roll_dice(1, 1 + div_rand_round(pow, 20))
+                            * div_rand_round(mult, BASELINE_DELAY);
         dam = resist_adjust_damage(*ai, BEAM_POISON, dam);
 
         if (ai->is_player())
@@ -3556,10 +3611,14 @@ spret cast_glaciate(actor *caster, int pow, coord_def aim, bool fail)
 
                 beam.draw(entry.first);
             }
-            scaled_delay(25);
+
+            // Why doesn't this set beam.draw_delay instead?
+            if (!Options.reduce_animations)
+                scaled_delay(25); // beam.draw should trigger a redraw already?
         }
 
-        scaled_delay(100);
+        if (Options.reduce_animations)
+            animation_delay(100, true);
     }
 
     if (you.can_see(*caster) || caster->is_player())
@@ -4200,7 +4259,7 @@ spret cast_noxious_bog(int pow, bool fail)
 
     fail_check();
 
-    const int turns = 5 + random2(pow / 10);
+    const int turns = 4 + random2(2 + div_rand_round(pow, 10));
     you.increase_duration(DUR_NOXIOUS_BOG, turns);
 
     for (auto pos : bog_locs)

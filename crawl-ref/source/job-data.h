@@ -68,7 +68,7 @@ static const map<job_type, job_def> job_data =
 { JOB_BERSERKER, {
     "Be", "Berserker",
     9, -1, 4,
-    { SP_HILL_ORC, SP_OGRE, SP_MERFOLK, SP_MINOTAUR, SP_GARGOYLE, SP_PALENTONGA, },
+    { SP_HILL_ORC, SP_OGRE, SP_MERFOLK, SP_MINOTAUR, SP_GARGOYLE, SP_ARMATAUR, },
     { },
     { "animal skin" },
     WCHOICE_PLAIN,
@@ -164,7 +164,7 @@ static const map<job_type, job_def> job_data =
     "Fi", "Fighter",
     8, 0, 4,
     { SP_METEORAN, SP_HILL_ORC, SP_TROLL, SP_MINOTAUR, SP_GARGOYLE,
-      SP_PALENTONGA, },
+      SP_ARMATAUR, },
     { },
     { "scale mail", "buckler", "potion of might" },
     WCHOICE_GOOD,
@@ -237,7 +237,7 @@ static const map<job_type, job_def> job_data =
         SPELL_FREEZE,
         SPELL_FROZEN_RAMPARTS,
         SPELL_OZOCUBUS_ARMOUR,
-        SPELL_HAILSTORM,
+        SPELL_SUMMON_ICE_BEAST,
     },
     { "robe", "potion of magic" },
     WCHOICE_NONE,
@@ -259,7 +259,7 @@ static const map<job_type, job_def> job_data =
 { JOB_MONK, {
     "Mo", "Monk",
     3, 2, 7,
-    { SP_METEORAN, SP_HILL_ORC, SP_TROLL, SP_PALENTONGA, SP_MERFOLK,
+    { SP_METEORAN, SP_HILL_ORC, SP_TROLL, SP_ARMATAUR, SP_MERFOLK,
       SP_GARGOYLE, SP_DEMONSPAWN, },
     { },
     { "robe", "potion of ambrosia" },
@@ -283,6 +283,22 @@ static const map<job_type, job_def> job_data =
     WCHOICE_NONE,
     { { SK_SPELLCASTING, 2 }, { SK_NECROMANCY, 4 }, { SK_DODGING, 2 },
       { SK_STEALTH, 2 }, },
+} },
+
+{ JOB_REAVER, {
+    "Re", "Reaver",
+    4, 5, 3,
+    { SP_GNOLL, SP_TENGU, SP_BARACHI, SP_DEMONSPAWN, SP_BASE_DRACONIAN,
+      SP_HILL_ORC, },
+    {
+        SPELL_KISS_OF_DEATH,
+        SPELL_MOMENTUM_STRIKE,
+        SPELL_HAILSTORM,
+    },
+    { "leather armour" },
+    WCHOICE_PLAIN,
+    { { SK_FIGHTING, 2 }, { SK_WEAPON, 3 }, { SK_DODGING, 2 },
+      { SK_SPELLCASTING, 2 }, { SK_CONJURATIONS, 3 }, },
 } },
 
 { JOB_SUMMONER, {
@@ -351,11 +367,11 @@ static const map<job_type, job_def> job_data =
 { JOB_WARPER, {
     "Wr", "Warper",
     3, 5, 4,
-    { SP_FELID, SP_METEORAN, SP_SPRIGGAN, SP_PALENTONGA, SP_BASE_DRACONIAN, },
+    { SP_FELID, SP_METEORAN, SP_SPRIGGAN, SP_ARMATAUR, SP_BASE_DRACONIAN, },
     {
         SPELL_BLINK,
         SPELL_BECKONING,
-        SPELL_GRAVITAS,
+        SPELL_ELECTRIC_CHARGE,
         SPELL_TELEPORT_OTHER,
         SPELL_MANIFOLD_ASSAULT,
     },

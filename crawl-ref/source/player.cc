@@ -375,7 +375,7 @@ bool swap_check(monster* mons, coord_def &loc, bool quiet)
 {
     loc = you.pos();
 
-    if (you.is_stationary())
+    if (!you.is_motile())
         return false;
 
     // Don't move onto dangerous terrain.
@@ -1164,10 +1164,7 @@ int player_regen()
     // Note: if some condition can set rr = 0, can't be rested off, and
     // would allow travel, please update is_sufficiently_rested.
 
-    int rr = you.hp_max / 3;
-
-    if (rr > 20)
-        rr = 20 + ((rr - 20) / 2);
+    int rr = 20 + you.hp_max / 6;
 
     // Add in miscellaneous bonuses
     rr += _player_bonus_regen();
@@ -1782,13 +1779,13 @@ int player_prot_life(bool allow_random, bool temp, bool items)
 
 // Even a slight speed advantage is very good... and we certainly don't
 // want to go past 6 (see below). -- bwr
-int player_movement_speed()
+int player_movement_speed(bool check_terrain)
 {
     int mv = you.form == transformation::none
         ? 10
         : form_base_movespeed(you.form);
 
-    if (feat_is_water(env.grid(you.pos())))
+    if (check_terrain && feat_is_water(env.grid(you.pos())))
     {
         if (you.get_mutation_level(MUT_NIMBLE_SWIMMER) >= 2)
             mv -= 4;
@@ -1798,8 +1795,11 @@ int player_movement_speed()
 
     // moving on liquefied ground, or while maintaining the
     // effect takes longer
-    if (you.liquefied_ground() || you.duration[DUR_LIQUEFYING])
+    if (check_terrain && (you.liquefied_ground()
+                          || you.duration[DUR_LIQUEFYING]))
+    {
         mv += 3;
+    }
 
     // armour
     if (player_equip_unrand(UNRAND_LIGHTNING_SCALES))
@@ -1830,7 +1830,8 @@ int player_movement_speed()
         mv /= 10;
     }
 
-    if (you.duration[DUR_SWIFTNESS] > 0 && !you.in_liquid())
+    if (you.duration[DUR_SWIFTNESS] > 0 && (!check_terrain
+                                            || !you.in_liquid()))
     {
         if (you.attribute[ATTR_SWIFTNESS] > 0)
           mv = div_rand_round(3*mv, 4);
@@ -3244,10 +3245,10 @@ static void _display_attack_delay()
     {
         item_def fake_proj;
         populate_fake_projectile(*weapon, fake_proj);
-        delay = you.attack_delay(&fake_proj, false).expected();
+        delay = you.attack_delay(&fake_proj).expected();
     }
     else
-        delay = you.attack_delay(nullptr, false).expected();
+        delay = you.attack_delay(nullptr).expected();
 
     const bool at_min_delay = weapon
                               && you.skill(item_attack_skill(*weapon))
@@ -3541,12 +3542,6 @@ int player::infusion_amount() const
         return min(you.hp - 1, cost);
     else
         return min(you.magic_points, cost);
-}
-
-/// How much bonus damage do you get per MP spent?
-int player::infusion_multiplier() const {
-    // Maulers are pretty fun as is, but infusion needs a buff.
-    return player_equip_unrand(UNRAND_POWER_GLOVES) ? 2 : 4;
 }
 
 void dec_hp(int hp_loss, bool fatal, const char *aux)
@@ -4701,9 +4696,14 @@ void dec_ambrosia_player(int delay)
     const int mp_restoration = div_rand_round(delay*(3 + random2(3)), BASELINE_DELAY);
 
     if (!you.duration[DUR_DEATHS_DOOR])
-        inc_hp(you.scale_potion_healing(hp_restoration));
+    {
+        int heal = you.scale_potion_healing(hp_restoration);
+        if (you.has_mutation(MUT_LONG_TONGUE))
+            heal += hp_restoration;
+        inc_hp(heal);
+    }
 
-    inc_mp(mp_restoration);
+    inc_mp(mp_restoration * (you.has_mutation(MUT_LONG_TONGUE) ? 2 : 1));
 
     if (!you.duration[DUR_AMBROSIA])
         mpr("You feel less invigorated.");
@@ -5788,7 +5788,7 @@ int player::base_ac_from(const item_def &armour, int scale) const
     const int AC = base * (440 + skill(SK_ARMOUR, 20)) / 440;
 
     // The deformed don't fit into body armour very well.
-    // (This includes nagas and palentongas.)
+    // (This includes nagas and armataurs.)
     if (get_armour_slot(armour) == EQ_BODY_ARMOUR
             && (get_mutation_level(MUT_DEFORMED)
                 || get_mutation_level(MUT_PSEUDOPODS)))
@@ -6120,12 +6120,6 @@ int player::armour_class_with_specific_items(vector<const item_def *> items) con
     AC -= 400 * corrosion_amount();
 
     AC += sanguine_armour_bonus();
-
-    if (you.has_mutation(MUT_CURL)
-        && you.props[PALENTONGA_CURL_KEY].get_bool())
-    {
-        AC += 7 * scale;
-    }
 
     return AC / scale;
 }
@@ -7223,6 +7217,11 @@ bool player::is_stationary() const
         || you.duration[DUR_LOCKED_DOWN];
 }
 
+bool player::is_motile() const
+{
+    return !is_stationary() && !you.duration[DUR_NO_MOMENTUM];
+}
+
 bool player::malmutate(const string &reason)
 {
     ASSERT(!crawl_state.game_is_arena());
@@ -7445,7 +7444,7 @@ bool player::can_do_shaft_ability(bool quiet) const
 
     if (feat_is_shaftable(env.grid(pos())))
     {
-        if (!is_valid_shaft_level())
+        if (!is_valid_shaft_level(false))
         {
             if (!quiet)
                 mpr("You can't shaft yourself on this level.");

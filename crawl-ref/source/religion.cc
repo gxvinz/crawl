@@ -231,8 +231,7 @@ const vector<vector<god_power>> & get_all_god_powers()
         {   { 1, ABIL_LUGONU_ABYSS_EXIT,
                  "depart the Abyss",
                  "depart the Abyss at will" },
-            { 2, ABIL_LUGONU_BEND_SPACE, "bend space around yourself" },
-            { 3, ABIL_LUGONU_BANISH, "banish your foes" },
+            { 2, ABIL_LUGONU_BANISH, "banish your foes" },
             { 4, ABIL_LUGONU_CORRUPT, "corrupt the fabric of space" },
             { 5, ABIL_LUGONU_ABYSS_ENTER, "gate yourself to the Abyss" },
             { 7, ABIL_LUGONU_BLESS_WEAPON,
@@ -297,9 +296,6 @@ const vector<vector<god_power>> & get_all_god_powers()
             { 3, "Ashenzari will now keep your mind clear.",
                  "Ashenzari will no longer keep your mind clear.",
                  "Ashenzari keeps your mind clear." },
-            { 4, "Ashenzari will now grant you astral sight.",
-                 "Ashenzari will no longer grant you astral sight.",
-                 "Ashenzari grants you astral sight." },
         },
 
         // Dithmenos
@@ -1567,35 +1563,41 @@ static bool _give_kiku_gift(bool forced)
         return false;
     }
 
+    vector<spell_type> spell_options;
     vector<spell_type> chosen_spells;
+    size_t wanted_spells;
 
     // The first set should guarantee the player at least one ally spell, to
     // complement the Wretches ability.
     if (first_gift)
     {
         chosen_spells.push_back(SPELL_NECROTISE);
-        vector<spell_type> further_options = {SPELL_SUBLIMATION_OF_BLOOD,
-                                              SPELL_ROT,
-                                              SPELL_VAMPIRIC_DRAINING,
-                                              SPELL_ANGUISH,
-                                              SPELL_ANIMATE_DEAD};
-        shuffle_array(further_options);
-        for (spell_type spell : further_options)
-        {
-            if (spell_is_useless(spell, false))
-                continue;
-            chosen_spells.push_back(spell);
-            if (chosen_spells.size() >= 4)
-                break;
-        }
+        spell_options = {SPELL_KISS_OF_DEATH,
+                         SPELL_SUBLIMATION_OF_BLOOD,
+                         SPELL_ROT,
+                         SPELL_VAMPIRIC_DRAINING,
+                         SPELL_ANIMATE_DEAD};
+        wanted_spells = 4;
     }
     else
     {
-        chosen_spells = {SPELL_DISPEL_UNDEAD,
+        spell_options = {SPELL_ANGUISH,
+                         SPELL_DISPEL_UNDEAD,
                          SPELL_AGONY,
                          SPELL_BORGNJORS_VILE_CLUTCH,
                          SPELL_DEATH_CHANNEL,
                          SPELL_SIMULACRUM};
+        wanted_spells = 5;
+    }
+
+    shuffle_array(spell_options);
+    for (spell_type spell : spell_options)
+    {
+        if (spell_is_useless(spell, false))
+            continue;
+        chosen_spells.push_back(spell);
+        if (chosen_spells.size() >= wanted_spells)
+            break;
     }
 
     bool new_spell = false;
@@ -3206,6 +3208,11 @@ void excommunication(bool voluntary, god_type new_god)
         }
         break;
 
+    case GOD_RU:
+        if (!you.props[AVAILABLE_SAC_KEY].get_vector().empty())
+            ru_reset_sacrifice_timer();
+        break;
+
     default:
         break;
     }
@@ -3622,13 +3629,14 @@ static void _set_initial_god_piety()
         // monk bonus...
         you.props[RU_SACRIFICE_PROGRESS_KEY] = 0;
         // offer the first sacrifice faster than normal
+        if (!you.props.exists(RU_SACRIFICE_DELAY_KEY))
         {
             int delay = 50;
             if (crawl_state.game_is_sprint())
                 delay /= SPRINT_MULTIPLIER;
             you.props[RU_SACRIFICE_DELAY_KEY] = delay;
+            you.props[RU_SACRIFICE_PENALTY_KEY] = 0;
         }
-        you.props[RU_SACRIFICE_PENALTY_KEY] = 0;
         break;
 
     case GOD_IGNIS:
